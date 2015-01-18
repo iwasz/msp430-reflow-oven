@@ -2,6 +2,17 @@
 #include <driverlib.h>
 #include <hw_regaccess.h>
 #include <hw_memmap.h>
+#include <eusci_a_spi.h>
+
+#include "usbConfig/descriptors.h"
+#include "USB_API/USB_Common/device.h"
+#include "USB_API/USB_Common/usb.h"                 // USB-specific functions
+#include "USB_API/USB_CDC_API/UsbCdc.h"
+#include "usbApp/usbConstructs.h"
+
+volatile uint8_t bHID_DataReceived_event = FALSE;  // Flags set by event handler
+volatile uint8_t bCDC_DataReceived_event = FALSE;  // to indicate data has been
+#define SPICLK 500000
 
 void initPorts (void)
 {
@@ -163,6 +174,8 @@ void initClocks (void)
          * Uwaga! Użyłem operatora =, a nie |=, żeby nadpisać wykluczające się ustawienia!
          */
         UCSCTL4 = SELM__DCOCLK | SELS__DCOCLK | SELA__REFOCLK;
+
+        UCS_setExternalClockSource (32768, 4000000);
 }
 
 /****************************************************************************/
@@ -237,6 +250,50 @@ void initTimers (void)
 
 /****************************************************************************/
 
+void initSpi (void)
+{
+        /*
+         * Ports:
+         * P2.7 : Clock signal output – USCI_A0 SPI master mode
+         * P3.2 : Slave transmit enable – USCI_A0 SPI mode
+         * P3.3 : Slave in, master out – USCI_A0 SPI mode
+         * P3.4 : Slave out, master in – USCI_A0 SPI mode : NOT USED
+         */
+        GPIO_setAsPeripheralModuleFunctionInputPin (GPIO_PORT_P2, GPIO_PIN7);
+        GPIO_setAsPeripheralModuleFunctionInputPin (GPIO_PORT_P3, /*GPIO_PIN2 |*/ GPIO_PIN3 | GPIO_PIN4);
+
+        P2DIR |= GPIO_PIN7; // Ustaw jako wyjście.
+        P2DS |= GPIO_PIN7; // Prąd duży.
+
+        P3DIR |= GPIO_PIN2 | GPIO_PIN3; // Ustaw jako wyjście.
+        P3DS |= GPIO_PIN2 | GPIO_PIN3; // Prąd duży.
+        P3OUT |= GPIO_PIN2; // disable slave
+
+        uint8_t returnValue = USCI_A_SPI_masterInit (USCI_A0_BASE,
+                                                     USCI_A_SPI_CLOCKSOURCE_SMCLK,
+                                                     UCS_getSMCLK (),
+                                                     SPICLK,
+                                                     USCI_A_SPI_MSB_FIRST,
+                                                     USCI_A_SPI_PHASE_DATA_CHANGED_ONFIRST_CAPTURED_ON_NEXT,
+                                                     USCI_A_SPI_CLOCKPOLARITY_INACTIVITY_HIGH);
+
+        if (STATUS_FAIL == returnValue) {
+//                cdcSendDataInBackground((uint8_t*) wholeString, strlen (wholeString), CDC0_INTFNUM, 1);
+                return;
+        }
+
+//        USCI_A_SPI_select4PinFunctionality (USCI_A0_BASE, EUSCI_A_SPI_ENABLE_SIGNAL_FOR_4WIRE_SLAVE);
+
+        //Enable SPI module
+        USCI_A_SPI_enable (USCI_A0_BASE);
+
+        //Enable Receive interrupt
+        USCI_A_SPI_clearInterruptFlag (USCI_A0_BASE, USCI_A_SPI_RECEIVE_INTERRUPT);
+        USCI_A_SPI_enableInterrupt (USCI_A0_BASE, USCI_A_SPI_RECEIVE_INTERRUPT);
+}
+
+/****************************************************************************/
+
 __attribute__((interrupt (PORT1_VECTOR)))
 void port1 (void)
 {
@@ -260,15 +317,58 @@ static volatile int III = 0;
 __attribute__((interrupt(TIMER1_A1_VECTOR)))
 void timeIterrupt (void)
 {
-        if (++III % 2 == 0) {
-                P4OUT &= ~GPIO_PIN7;
-        }
-        else {
-                P4OUT |= GPIO_PIN7;
-        }
+        //uint8_t* wholeString = "hello!\r\n";
+        //cdcSendDataInBackground((uint8_t*) wholeString, strlen (wholeString), CDC0_INTFNUM, 1);
 
+
+        P3OUT &= ~GPIO_PIN2; // enable slave
+        __delay_cycles (100);
+
+        //Initialize data values
+        uint8_t transmitData = 0x00;
+
+        //USCI_A0 TX buffer ready?
+        while (!USCI_A_SPI_getInterruptStatus (USCI_A0_BASE, USCI_A_SPI_TRANSMIT_INTERRUPT))
+                ;
+
+        //Transmit Data to slave
+        USCI_A_SPI_transmitData (USCI_A0_BASE, transmitData);
+        P3OUT |= GPIO_PIN2; // disable slave
+
+
+
+
+        P4OUT ^= GPIO_PIN7;
         TA1CTL &= ~TAIFG;
         TA1CCTL1 &= ~CCIFG;
+}
+
+__attribute__((interrupt(USCI_A0_VECTOR)))
+void USCI_A0_ISR(void)
+{
+        __even_in_range(UCA0IV, 4);
+//        switch (__even_in_range(UCA0IV, 4)) {
+//        //Vector 2 - RXIFG
+//        case 2:
+                //USCI_A0 TX buffer ready?
+                while (!USCI_A_SPI_getInterruptStatus (USCI_A0_BASE, USCI_A_SPI_TRANSMIT_INTERRUPT))
+                        ;
+
+                uint8_t receiveData = USCI_A_SPI_receiveData (USCI_A0_BASE);
+                cdcSendDataInBackground (&receiveData, 1, CDC0_INTFNUM, 1);
+
+                //Increment data
+//                transmitData++;
+
+                //Send next value
+//                USCI_A_SPI_transmitData(USCI_A0_BASE, transmitData);
+
+                //Delay between transmissions for slave to process information
+//                __delay_cycles(40);
+
+//                break;
+//        default: break;
+//        }
 }
 
 /****************************************************************************/
@@ -282,19 +382,80 @@ int main (void)
         initPorts ();
         initClocks ();
         initTimers ();
+        initSpi ();
+        USB_setup (TRUE, TRUE);  // Init USB & events; if a host is present, connect
 
         __enable_interrupt ();
 
         while (1) {
-                P1OUT = 0x01;
+                uint8_t ReceiveError = 0, SendError = 0;
+//                uint16_t count;
 
-                for (volatile uint16_t i = 0; i < 65535; ++i)
-                                asm ("nop");
+                // Check the USB state and loop accordingly
+                switch (USB_connectionState()) {
 
-                P1OUT = 0x00;
+                case ST_ENUM_ACTIVE:
+                        __bis_SR_register(LPM0_bits + GIE);         // Enter LPM0 until awakened by an event handler
+                        __no_operation();
+                        P1OUT ^= GPIO_PIN0;
+                        // For debugger
 
-                for (volatile uint16_t i = 0; i < 65535; ++i)
-                                asm ("nop");
+                        // Exit LPM because of a data-receive event, and fetch the received data
+
+//                        if (bHID_DataReceived_event) {               // Message is received from HID application
+//                                bHID_DataReceived_event = FALSE;        // Clear flag early -- just in case execution breaks below because of an error
+//                                count = hidReceiveDataInBuffer((uint8_t*) dataBuffer, BUFFER_SIZE, HID0_INTFNUM);
+//
+//                                uint16_t load16 = 0;
+//
+//                                if (count >= 2) {
+//                                        load16 = (dataBuffer[0] << 8) | dataBuffer[1];
+//                                }
+//
+//                                moveAbsolute (load16);
+//
+//                        }
+
+//                        if (bCDC_DataReceived_event) { // Message is received from CDC application
+//                                bCDC_DataReceived_event = FALSE; // Clear flag early -- just in case execution breaks below because of an error
+//                                cdcReceiveDataInBuffer((uint8_t*) wholeString, MAX_STR_LENGTH, CDC0_INTFNUM);
+//                                strncat(wholeString, ".\r\n ", 3);
+//
+//                                if (cdcSendDataInBackground((uint8_t*) wholeString, strlen(wholeString), CDC0_INTFNUM, 1)) {  // Send message to other CDC App
+//                                        SendError = 0x01;
+//                                        break;
+//                                }
+//
+//                                memset(wholeString, 0, MAX_STR_LENGTH);   // Clear wholeString
+//                        }
+
+                        break;
+
+                        // These cases are executed while your device is disconnected from
+                        // the host (meaning, not enumerated); enumerated but suspended
+                        // by the host, or connected to a powered hub without a USB host
+                        // present.
+
+                case ST_PHYS_DISCONNECTED:
+                case ST_ENUM_SUSPENDED:
+                case ST_PHYS_CONNECTED_NOENUM_SUSP:
+                        __bis_SR_register(LPM3_bits + GIE);
+                        _NOP();
+                        break;
+
+                        // The default is executed for the momentary state
+                        // ST_ENUM_IN_PROGRESS.  Usually, this state only last a few
+                        // seconds.  Be sure not to enter LPM3 in this state; USB
+                        // communication is taking place here, and therefore the mode must
+                        // be LPM0 or active-CPU.
+                case ST_ENUM_IN_PROGRESS:
+                default:
+                        ;
+                }
+
+                if (ReceiveError || SendError) {
+                        //TO DO: User can place code here to handle error
+                }
         }
 
         return 0;
