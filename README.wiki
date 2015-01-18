@@ -2,11 +2,11 @@
 Firmware for my simple reflow-owen controller.
 
 ===Build===
-git clone xxx
+<source language="bash">
+git clone https://github.com/iwasz/msp430-reflow-owen.git
 cd msp430-reflow-owen/build
 # Edit configure.sh so it points to MSP-ware
 ./configure.sh
 make 
 make upload
-
-
+</source>
