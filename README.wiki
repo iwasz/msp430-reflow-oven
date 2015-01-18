@@ -1,27 +1,12 @@
 ===What it is===
-Nothing special, just my simple tests.
+Firmware for my simple reflow-owen controller.
 
-===So why those huge headings?===
-Just trying out the mediawiki format. I am used to this.
+===Build===
+git clone xxx
+cd msp430-reflow-owen/build
+# Edit configure.sh so it points to MSP-ware
+./configure.sh
+make 
+make upload
 
-* Will it work,
-* after
-** I commit
-*** This?
-
-;1:one
-;2:two
-
-<math>a^2 = \frac{A_z}{B_x}</math>
-
-Wow, they are serious at this GitHub thing...
-
-{| class="wikitable" border="1"
-|-
-! header 1 !! header 2
-|-
-| cell 1 || cell 2
-|-
-| cell 1 || cell 2
-|}
 
