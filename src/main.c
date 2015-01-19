@@ -2,7 +2,7 @@
 #include <driverlib.h>
 #include <hw_regaccess.h>
 #include <hw_memmap.h>
-#include <eusci_a_spi.h>
+//#include <eusci_a_spi.h>
 
 #include "usbConfig/descriptors.h"
 #include "USB_API/USB_Common/device.h"
@@ -324,16 +324,13 @@ void timeIterrupt (void)
         P3OUT &= ~GPIO_PIN2; // enable slave
         __delay_cycles (100);
 
-        //Initialize data values
-        uint8_t transmitData = 0x00;
-
         //USCI_A0 TX buffer ready?
         while (!USCI_A_SPI_getInterruptStatus (USCI_A0_BASE, USCI_A_SPI_TRANSMIT_INTERRUPT))
                 ;
 
         //Transmit Data to slave
-        USCI_A_SPI_transmitData (USCI_A0_BASE, transmitData);
-        P3OUT |= GPIO_PIN2; // disable slave
+        USCI_A_SPI_transmitData (USCI_A0_BASE, 0x00);
+//        P3OUT |= GPIO_PIN2; // disable slave
 
 
 
@@ -342,6 +339,10 @@ void timeIterrupt (void)
         TA1CTL &= ~TAIFG;
         TA1CCTL1 &= ~CCIFG;
 }
+
+
+uint8_t byteNo = 0;
+uint8_t data[4];
 
 __attribute__((interrupt(USCI_A0_VECTOR)))
 void USCI_A0_ISR(void)
@@ -354,8 +355,16 @@ void USCI_A0_ISR(void)
                 while (!USCI_A_SPI_getInterruptStatus (USCI_A0_BASE, USCI_A_SPI_TRANSMIT_INTERRUPT))
                         ;
 
-                uint8_t receiveData = USCI_A_SPI_receiveData (USCI_A0_BASE);
-                cdcSendDataInBackground (&receiveData, 1, CDC0_INTFNUM, 1);
+                data[byteNo++] = USCI_A_SPI_receiveData (USCI_A0_BASE);
+
+                if (byteNo > 3) {
+                        byteNo = 0;
+                        P3OUT |= GPIO_PIN2; // disable slave
+                        cdcSendDataInBackground (data, 4, CDC0_INTFNUM, 1);
+                }
+                else {
+                        USCI_A_SPI_transmitData (USCI_A0_BASE, 0x00);
+                }
 
                 //Increment data
 //                transmitData++;
