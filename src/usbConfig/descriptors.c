@@ -237,8 +237,8 @@ uint8_t const abromStringDescriptor[] = {
     // String index2, Product
     18, // Length of this string descriptor
     3,  // bDescriptorType
-    'C',0x00,'P',0x00,'U',0x00,'G',0x00,'a',0x00,'u',0x00,
-    'g',0x00,'e',0x00,
+    'B',0x00,'a',0x00,'k',0x00,'e',0x00,'r',0x00,'D',0x00,
+    'e',0x00,'v',0x00,
 
     // String index3, Serial Number
     4, // Length of this string descriptor
@@ -248,22 +248,22 @@ uint8_t const abromStringDescriptor[] = {
     // String index4, Configuration String
     32, // Length of this string descriptor
     3,  // bDescriptorType
-    'C',0x00,'P',0x00,'U',0x00,'G',0x00,'a',0x00,'u',0x00,
-    'g',0x00,'e',0x00,' ',0x00,'c',0x00,'o',0x00,'n',0x00,
+    'B',0x00,'a',0x00,'k',0x00,'e',0x00,'r',0x00,'D',0x00,
+    'e',0x00,'v',0x00,' ',0x00,'c',0x00,'o',0x00,'n',0x00,
     'f',0x00,'i',0x00,'g',0x00,
 
     // String index5, Interface String
     38, // Length of this string descriptor
     3,  // bDescriptorType
-    'C',0x00,'P',0x00,'U',0x00,'G',0x00,'a',0x00,'u',0x00,
-    'g',0x00,'e',0x00,' ',0x00,'i',0x00,'n',0x00,'t',0x00,
+    'B',0x00,'a',0x00,'k',0x00,'e',0x00,'r',0x00,'D',0x00,
+    'e',0x00,'v',0x00,' ',0x00,'i',0x00,'n',0x00,'t',0x00,
     'e',0x00,'r',0x00,'f',0x00,'a',0x00,'c',0x00,'e',0x00,
 
     // String index6, Interface String
     38, // Length of this string descriptor
     3,  // bDescriptorType
-    'C',0x00,'P',0x00,'U',0x00,'G',0x00,'a',0x00,'u',0x00,
-    'g',0x00,'e',0x00,' ',0x00,'i',0x00,'n',0x00,'t',0x00,
+    'B',0x00,'a',0x00,'k',0x00,'e',0x00,'r',0x00,'D',0x00,
+    'e',0x00,'v',0x00,' ',0x00,'i',0x00,'n',0x00,'t',0x00,
     'e',0x00,'r',0x00,'f',0x00,'a',0x00,'c',0x00,'e',0x00,
 };
 
@@ -298,8 +298,23 @@ const struct tUsbHandle stUsbHandle[]=
 };
 //-------------DEVICE REQUEST LIST---------------------------------------------
 
+#define GET_TEMP_REQUEST 0x01
+extern uint8_t getTempRequest (void);
+
 const tDEVICE_REQUEST_COMPARE tUsbRequestList[] = 
 {
+        // Vendor specific requests
+        USB_REQ_TYPE_INPUT | USB_REQ_TYPE_VENDOR | USB_REQ_TYPE_INTERFACE, // bmRequestType
+        GET_TEMP_REQUEST,                                                  // bRequest
+        0x00,                                                              // wValueL
+        0x00,                                                              // wValueH
+        0x00,                                                              // wIndexL
+        0x00,                                                              // wIndexH
+        0x04,                                                              // wLengthL Number of bytes to transfer if there is a data phase
+        0x00,                                                              // wLengthH
+        0xff,
+        &getTempRequest,
+
 //---- CDC 0 Class Requests -----//
 
         // GET LINE CODING
