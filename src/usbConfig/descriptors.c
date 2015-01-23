@@ -310,7 +310,7 @@ const tDEVICE_REQUEST_COMPARE tUsbRequestList[] =
         0x00,                                                              // wValueH
         0x00,                                                              // wIndexL
         0x00,                                                              // wIndexH
-        0x04,                                                              // wLengthL Number of bytes to transfer if there is a data phase
+        12,                                                              // wLengthL Number of bytes to transfer if there is a data phase
         0x00,                                                              // wLengthH
         0xff,
         &getTempRequest,

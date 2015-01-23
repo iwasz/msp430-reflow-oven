@@ -12,10 +12,10 @@
 
 volatile uint8_t bHID_DataReceived_event = FALSE;  // Flags set by event handler
 volatile uint8_t bCDC_DataReceived_event = FALSE;  // to indicate data has been
-#define SPICLK 500000
+#define SPICLK 100000
 
 uint8_t byteNo = 0; // TODO
-uint8_t thermocoupleData[4];
+uint8_t thermocoupleData[12];
 uint8_t thermocoupleTransferPending = 0;
 
 void initPorts (void)
@@ -29,6 +29,10 @@ void initPorts (void)
 
         P4DIR |= GPIO_PIN7;
         P4OUT &= ~GPIO_PIN7;
+
+        // Pin do sterowania przekaźnikiem.
+        P2DIR |= GPIO_PIN5;
+        P2OUT &= ~GPIO_PIN5;
 
         // P2.1 jako wejście
         P2DIR &= ~GPIO_PIN1;
@@ -339,10 +343,19 @@ void timeIterrupt (void)
 
 
 
-        P4OUT ^= GPIO_PIN7;
+
+//        if (P4OUT & GPIO_PIN7) {
+//                P2OUT |= GPIO_PIN5;
+//        }
+//        else {
+//                P2OUT &= ~GPIO_PIN5;
+//        }
+
         TA1CTL &= ~TAIFG;
         TA1CCTL1 &= ~CCIFG;
 }
+
+int32_t accumulatedError = 0;
 
 __attribute__((interrupt(USCI_A0_VECTOR)))
 void USCI_A0_ISR(void)
@@ -361,6 +374,44 @@ void USCI_A0_ISR(void)
                         byteNo = 0;
                         P3OUT |= GPIO_PIN2; // disable slave
 //                        cdcSendDataInBackground (thermocoupleData, 4, CDC0_INTFNUM, 1);
+                        uint16_t temp = (((thermocoupleData[0] << 8) | thermocoupleData[1]) >> 2);
+                        uint16_t sp = 100; // sp * 4;
+                        int16_t e = (sp * 4) - temp; // Max od -1200 do 1200.
+                        accumulatedError += e;
+
+                        // TODO przekazywać w requeście.
+                        uint16_t kp = 5;
+                        uint16_t ki = 1;
+
+                        int32_t p = (int32_t)kp * e;
+                        int32_t i = ki * accumulatedError / 1000;
+                        int32_t u =  p + i;
+
+//                        thermocoupleData[4] = p >> 8;
+//                        thermocoupleData[5] = p & 0xff;
+//                        thermocoupleData[6] = i >> 8;
+//                        thermocoupleData[7] = i & 0xff;
+
+                        uint8_t *pp = (uint8_t *)&p;
+                        thermocoupleData[4] = pp[0];
+                        thermocoupleData[5] = pp[1];
+                        thermocoupleData[6] = pp[2];
+                        thermocoupleData[7] = pp[3];
+
+                        pp = (uint8_t *)&i;
+                        thermocoupleData[8] = pp[0];
+                        thermocoupleData[9] = pp[1];
+                        thermocoupleData[10] = pp[2];
+                        thermocoupleData[11] = pp[3];
+
+                        if (u < 0) {
+                                P2OUT &= ~GPIO_PIN5;
+                        }
+                        else {
+                                P2OUT |= GPIO_PIN5;
+                        }
+
+                        P4OUT ^= GPIO_PIN7;
                         thermocoupleTransferPending = 0;
                 }
                 else {
@@ -386,7 +437,7 @@ void USCI_A0_ISR(void)
 uint8_t getTempRequest (void)
 {
 //        usbClearOEP0ByteCount ();
-        wBytesRemainingOnIEP0 = 0x04; //amount of data to be send over EP0 to host
+        wBytesRemainingOnIEP0 = 12; //amount of data to be send over EP0 to host
 
         while (thermocoupleTransferPending)
                 ;
