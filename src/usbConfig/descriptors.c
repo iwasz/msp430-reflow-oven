@@ -301,6 +301,9 @@ const struct tUsbHandle stUsbHandle[]=
 #define GET_TEMP_REQUEST 0x01
 extern uint8_t getTempRequest (void);
 
+#define SET_TEMP_REQUEST 0x02
+extern uint8_t setTempRequest (void);
+
 const tDEVICE_REQUEST_COMPARE tUsbRequestList[] = 
 {
         // Vendor specific requests
@@ -310,10 +313,18 @@ const tDEVICE_REQUEST_COMPARE tUsbRequestList[] =
         0x00,                                                              // wValueH
         0x00,                                                              // wIndexL
         0x00,                                                              // wIndexH
-        12,                                                              // wLengthL Number of bytes to transfer if there is a data phase
+        2,                                                                 // wLengthL Number of bytes to transfer if there is a data phase
         0x00,                                                              // wLengthH
         0xff,
         &getTempRequest,
+
+        USB_REQ_TYPE_OUTPUT | USB_REQ_TYPE_VENDOR | USB_REQ_TYPE_INTERFACE,
+        SET_TEMP_REQUEST,
+        0x00, 0x00,
+        0x00, 0x00,
+        0x02, 0x00,
+        0xff,
+        &setTempRequest,
 
 //---- CDC 0 Class Requests -----//
 
