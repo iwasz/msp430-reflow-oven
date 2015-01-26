@@ -369,9 +369,10 @@ void USCI_A0_ISR(void)
                         thermocoupleTransferPending = 0;
                         int16_t temp = (((uint16_t)thermocoupleData[0] << 8) | (uint16_t)thermocoupleData[1]) >> 2;
 
-                        if (temp & 0x80) {
-                                temp = -temp;
-                        }
+//                        if (temp & 0x80) {
+//                                temp = -temp;
+//                        }
+
                         lastTemp = temp / 4;
 //
 //                        tempAvg += temp;
@@ -448,6 +449,7 @@ void USCI_A0_ISR(void)
 
 /****************************************************************************/
 
+uint8_t outputBuffer[2];
 uint8_t getTempRequest (void)
 {
 //        usbClearOEP0ByteCount ();
@@ -456,23 +458,20 @@ uint8_t getTempRequest (void)
         while (thermocoupleTransferPending)
                 ;
 
-        uint8_t buf[2];
-        lastTemp = setPoint;
-        buf[0] = lastTemp >> 8;
-        buf[1] = lastTemp & 0x00ff;
-        usbSendDataPacketOnEP0 (buf); //send data to host
+        outputBuffer[0] = lastTemp >> 8;
+        outputBuffer[1] = lastTemp & 0x00ff;
+        usbSendDataPacketOnEP0 (outputBuffer); //send data to host
 
         P1OUT ^= GPIO_PIN0;
         return FALSE;
 }
 
+uint8_t inputBuffer[2];
 uint8_t setTempRequest (void)
 {
-        uint8_t data[2];
-        usbReceiveDataPacketOnEP0(data);
-        setPoint = (((uint16_t)data[0]) << 8) | (uint16_t)data[1];
-        cdcSendDataInBackground(data, 2, CDC0_INTFNUM, 1);
-        return (FALSE);
+        usbReceiveDataPacketOnEP0 (inputBuffer);
+        setPoint = (((uint16_t)inputBuffer[0]) << 8) | (uint16_t)inputBuffer[1];
+        return FALSE;
 }
 
 /****************************************************************************/
