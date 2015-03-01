@@ -75,6 +75,7 @@ extern "C"
 // If no serial number is to be reported, set this to 0.
 #define USB_STR_INDEX_SERNUM  3             
 #define PHDC_ENDPOINTS_NUMBER               2  // bulk in, bulk out
+#define USB_XT2_BYPASS_MODE FALSE
 
 
 #define DESCRIPTOR_TOTAL_LENGTH             107    // wTotalLength, This is the sum of configuration descriptor length  + CDC descriptor length  + HID descriptor length

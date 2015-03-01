@@ -68,7 +68,7 @@ void initPorts (void)
 
 void initClocks (void)
 {
-        GPIO_setAsPeripheralModuleFunctionInputPin (GPIO_PORT_P5, GPIO_PIN2 | GPIO_PIN3 | GPIO_PIN4 | GPIO_PIN5);
+        GPIO_setAsPeripheralModuleFunctionInputPin (GPIO_PORT_P5, GPIO_PIN2 | GPIO_PIN3 /*| GPIO_PIN4 | GPIO_PIN5*/);
 
         // Wyłączenie bypasu (domyślne). Bypass się włącza kiedy doprowadzamy "gotowy" sygnał zegarowy do
         // wejścia XIN.
@@ -92,24 +92,24 @@ void initClocks (void)
                 SFRIFG1 &= ~OFIFG;
         }
 
-        // Wyłączenie bypassu i wyłączenie high frequency
-        UCSCTL6 &= ~(XT1BYPASS | XTS);
-
-        // Drive stregth.
-        UCSCTL6 |= (XT1DRIVE0 | XT1DRIVE1);
-
-        // Włączenie oscylatora XT2OSC. To się chyba powinno samo przestawić automatycznie i potem można go
-        // po prostu wyłączyć.
-        UCSCTL6 &= ~XT1OFF;
-
-        timeout = 50000;
-        while ((UCSCTL7 & XT1LFOFFG) && --timeout) {
-                //Clear OSC flaut Flags
-                UCSCTL7 &= ~(XT1LFOFFG);
-
-                //Clear OFIFG fault flag
-                SFRIFG1 &= ~OFIFG;
-        }
+//        // Wyłączenie bypassu i wyłączenie high frequency
+//        UCSCTL6 &= ~(XT1BYPASS | XTS);
+//
+//        // Drive stregth.
+//        UCSCTL6 |= (XT1DRIVE0 | XT1DRIVE1);
+//
+//        // Włączenie oscylatora XT2OSC. To się chyba powinno samo przestawić automatycznie i potem można go
+//        // po prostu wyłączyć.
+//        UCSCTL6 &= ~XT1OFF;
+//
+//        timeout = 50000;
+//        while ((UCSCTL7 & XT1LFOFFG) && --timeout) {
+//                //Clear OSC flaut Flags
+//                UCSCTL7 &= ~(XT1LFOFFG);
+//
+//                //Clear OFIFG fault flag
+//                SFRIFG1 &= ~OFIFG;
+//        }
 
         /*
          * FLL
@@ -275,23 +275,31 @@ void initSpi (void)
          * P3.3 : Slave in, master out – USCI_A0 SPI mode
          * P3.4 : Slave out, master in – USCI_A0 SPI mode : NOT USED
          */
-        GPIO_setAsPeripheralModuleFunctionInputPin (GPIO_PORT_P2, GPIO_PIN7);
-        GPIO_setAsPeripheralModuleFunctionInputPin (GPIO_PORT_P3, /*GPIO_PIN2 |*/ GPIO_PIN3 | GPIO_PIN4);
+//        GPIO_setAsPeripheralModuleFunctionInputPin (GPIO_PORT_P2, GPIO_PIN7);
+//        GPIO_setAsPeripheralModuleFunctionInputPin (GPIO_PORT_P3, /*GPIO_PIN2 |*/ GPIO_PIN3 | GPIO_PIN4);
 
-        P2DIR |= GPIO_PIN7; // Ustaw jako wyjście.
-        P2DS |= GPIO_PIN7; // Prąd duży.
 
-        P3DIR |= GPIO_PIN2 | GPIO_PIN3; // Ustaw jako wyjście.
-        P3DS |= GPIO_PIN2 | GPIO_PIN3; // Prąd duży.
-        P3OUT |= GPIO_PIN2; // disable slave
 
-        uint8_t returnValue = USCI_A_SPI_masterInit (USCI_A0_BASE,
+		/**
+		 * 4.0 - SCK  out, special
+		 * 4.1 - FIRE, out, norm
+		 * 4.3 - CS out, norm
+		 * 4.5 - SOMI in, special
+		 */
+		GPIO_setAsPeripheralModuleFunctionInputPin (GPIO_PORT_P4, GPIO_PIN0 | GPIO_PIN5);
+
+        P4DIR = GPIO_PIN0 | GPIO_PIN1 | GPIO_PIN3; // 5 as out, all the rest as intput.
+        P4DS = GPIO_PIN0 | GPIO_PIN1 | GPIO_PIN3; // Prąd duży.
+
+        P4OUT |= GPIO_PIN3; // disable slave
+
+        uint8_t returnValue = USCI_A_SPI_masterInit (USCI_A1_BASE,
                                                      USCI_A_SPI_CLOCKSOURCE_SMCLK,
                                                      UCS_getSMCLK (),
                                                      SPICLK,
                                                      USCI_A_SPI_MSB_FIRST,
-                                                     //USCI_A_SPI_PHASE_DATA_CHANGED_ONFIRST_CAPTURED_ON_NEXT,
-                                                     USCI_A_SPI_PHASE_DATA_CAPTURED_ONFIRST_CHANGED_ON_NEXT,
+                                                     USCI_A_SPI_PHASE_DATA_CHANGED_ONFIRST_CAPTURED_ON_NEXT,
+                                                     // USCI_A_SPI_PHASE_DATA_CAPTURED_ONFIRST_CHANGED_ON_NEXT,
                                                      USCI_A_SPI_CLOCKPOLARITY_INACTIVITY_LOW);
 
         if (STATUS_FAIL == returnValue) {
@@ -299,35 +307,35 @@ void initSpi (void)
                 return;
         }
 
-//        USCI_A_SPI_select4PinFunctionality (USCI_A0_BASE, EUSCI_A_SPI_ENABLE_SIGNAL_FOR_4WIRE_SLAVE);
+//        USCI_A_SPI_select4PinFunctionality (USCI_A1_BASE, EUSCI_A_SPI_ENABLE_SIGNAL_FOR_4WIRE_SLAVE);
 
         //Enable SPI module
-        USCI_A_SPI_enable (USCI_A0_BASE);
+        USCI_A_SPI_enable (USCI_A1_BASE);
 
         //Enable Receive interrupt
-        USCI_A_SPI_clearInterruptFlag (USCI_A0_BASE, USCI_A_SPI_RECEIVE_INTERRUPT);
-        USCI_A_SPI_enableInterrupt (USCI_A0_BASE, USCI_A_SPI_RECEIVE_INTERRUPT);
+        USCI_A_SPI_clearInterruptFlag (USCI_A1_BASE, USCI_A_SPI_RECEIVE_INTERRUPT);
+        USCI_A_SPI_enableInterrupt (USCI_A1_BASE, USCI_A_SPI_RECEIVE_INTERRUPT);
 }
 
 /****************************************************************************/
 
-__attribute__((interrupt (PORT1_VECTOR)))
-void port1 (void)
-{
-        P1OUT |= GPIO_PIN0;
-//        P1IFG &= ~GPIO_PIN1;
-//        volatile uint16_t y = P2IV;
-        P1IV = 0;
-}
-
-__attribute__((interrupt (PORT2_VECTOR)))
-void port2 (void)
-{
-        P1OUT &= ~GPIO_PIN0;
-//        P2IFG &= ~GPIO_PIN1;
-//        volatile uint16_t y = P2IV;
-        P2IV = 0;
-}
+//__attribute__((interrupt (PORT1_VECTOR)))
+//void port1 (void)
+//{
+//        P1OUT |= GPIO_PIN0;
+////        P1IFG &= ~GPIO_PIN1;
+////        volatile uint16_t y = P2IV;
+//        P1IV = 0;
+//}
+//
+//__attribute__((interrupt (PORT2_VECTOR)))
+//void port2 (void)
+//{
+//        P1OUT &= ~GPIO_PIN0;
+////        P2IFG &= ~GPIO_PIN1;
+////        volatile uint16_t y = P2IV;
+//        P2IV = 0;
+//}
 
 __attribute__((interrupt(TIMER1_A1_VECTOR)))
 void timeIterrupt (void)
@@ -336,36 +344,36 @@ void timeIterrupt (void)
         //cdcSendDataInBackground((uint8_t*) wholeString, strlen (wholeString), CDC0_INTFNUM, 1);
 
         thermocoupleTransferPending = 1;
-        P3OUT &= ~GPIO_PIN2; // enable slave
+        P4OUT &= ~GPIO_PIN3; // enable slave
         __delay_cycles (100);
 
         //USCI_A0 TX buffer ready?
-        while (!USCI_A_SPI_getInterruptStatus (USCI_A0_BASE, USCI_A_SPI_TRANSMIT_INTERRUPT))
+        while (!USCI_A_SPI_getInterruptStatus (USCI_A1_BASE, USCI_A_SPI_TRANSMIT_INTERRUPT))
                 ;
 
         //Transmit Data to slave
-        USCI_A_SPI_transmitData (USCI_A0_BASE, 0x00);
+        USCI_A_SPI_transmitData (USCI_A1_BASE, 0x00);
 
         TA1CTL &= ~TAIFG;
         TA1CCTL1 &= ~CCIFG;
 }
 
-__attribute__((interrupt(USCI_A0_VECTOR)))
-void USCI_A0_ISR(void)
+__attribute__((interrupt(USCI_A1_VECTOR)))
+void USCI_A1_ISR(void)
 {
         __even_in_range(UCA0IV, 4);
 //        switch (__even_in_range(UCA0IV, 4)) {
 //        //Vector 2 - RXIFG
 //        case 2:
                 //USCI_A0 TX buffer ready?
-                while (!USCI_A_SPI_getInterruptStatus (USCI_A0_BASE, USCI_A_SPI_TRANSMIT_INTERRUPT))
+                while (!USCI_A_SPI_getInterruptStatus (USCI_A1_BASE, USCI_A_SPI_TRANSMIT_INTERRUPT))
                         ;
 
-                thermocoupleData[byteNo++] = USCI_A_SPI_receiveData (USCI_A0_BASE);
+                thermocoupleData[byteNo++] = USCI_A_SPI_receiveData (USCI_A1_BASE);
 
                 if (byteNo > 3) {
                         byteNo = 0;
-                        P3OUT |= GPIO_PIN2; // disable slave
+                        P4OUT |= GPIO_PIN3; // disable slave
                         thermocoupleTransferPending = 0;
                         int16_t temp = (((uint16_t)thermocoupleData[0] << 8) | (uint16_t)thermocoupleData[1]) >> 2;
 
@@ -414,18 +422,18 @@ void USCI_A0_ISR(void)
 ////                                thermocoupleData[11] = pp[3];
 //
                                 if (lastTemp + deadBand >= setPoint) {
-                                        P2OUT &= ~GPIO_PIN5;
+                                        P4OUT &= ~GPIO_PIN1;
                                 }
                                 else {
-                                        P2OUT |= GPIO_PIN5;
+                                        P4OUT |= GPIO_PIN1;
                                 }
 
-                                P4OUT ^= GPIO_PIN7;
+//                                P4OUT ^= GPIO_PIN7;
 //
 //                        }
                 }
                 else {
-                        USCI_A_SPI_transmitData (USCI_A0_BASE, 0x00);
+                        USCI_A_SPI_transmitData (USCI_A1_BASE, 0x00);
                 }
 
 
@@ -437,7 +445,7 @@ void USCI_A0_ISR(void)
 //                transmitData++;
 
                 //Send next value
-//                USCI_A_SPI_transmitData(USCI_A0_BASE, transmitData);
+//                USCI_A_SPI_transmitData(USCI_A1_BASE, transmitData);
 
                 //Delay between transmissions for slave to process information
 //                __delay_cycles(40);
@@ -462,7 +470,7 @@ uint8_t getTempRequest (void)
         outputBuffer[1] = lastTemp & 0x00ff;
         usbSendDataPacketOnEP0 (outputBuffer); //send data to host
 
-        P1OUT ^= GPIO_PIN0;
+//        P1OUT ^= GPIO_PIN0;
         return FALSE;
 }
 
@@ -482,7 +490,7 @@ int main (void)
 
         PMM_setVCore (PMM_CORE_LEVEL_3);
 
-        initPorts ();
+//        initPorts ();
         initClocks ();
         initTimers ();
         initSpi ();
@@ -500,7 +508,7 @@ int main (void)
                 case ST_ENUM_ACTIVE:
                         __bis_SR_register(LPM0_bits + GIE);         // Enter LPM0 until awakened by an event handler
                         __no_operation();
-                        P1OUT ^= GPIO_PIN0;
+//                        P1OUT ^= GPIO_PIN0;
                         // For debugger
 
                         // Exit LPM because of a data-receive event, and fetch the received data
